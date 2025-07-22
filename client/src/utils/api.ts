@@ -23,27 +23,35 @@ export interface Property {
   id: number;
   name: string;
   location: string;
-  property_type: string;
-  contact_info?: any;
+  region: string;
+  image?: string;
+  last_audit_score?: number;
+  next_audit_date?: string;
+  status: string;
   created_at: string;
 }
 
 export interface Audit {
   id: number;
   property_id: number;
-  auditor_id: number;
+  auditor_id?: number;
   reviewer_id?: number;
-  scheduled_date: string;
-  audit_type: string;
   status: string;
-  completed_date?: string;
   overall_score?: number;
+  cleanliness_score?: number;
+  branding_score?: number;
+  operational_score?: number;
   compliance_zone?: string;
-  notes?: string;
+  findings?: any;
+  action_plan?: any;
+  ai_report?: any;
+  ai_insights?: any;
+  submitted_at?: string;
+  reviewed_at?: string;
+  created_at: string;
   property?: Property;
   auditor?: User;
   reviewer?: User;
-  created_at: string;
 }
 
 class ApiClient {
@@ -62,9 +70,13 @@ class ApiClient {
     const url = \`\${this.baseURL}\${endpoint}\`;
     
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
       ...((options.headers as Record<string, string>) || {}),
     };
+
+    // Only add Content-Type for JSON requests
+    if (options.body && typeof options.body === 'string') {
+      headers['Content-Type'] = 'application/json';
+    }
 
     if (this.token) {
       headers.Authorization = \`Bearer \${this.token}\`;
@@ -79,7 +91,9 @@ class ApiClient {
       const response = await fetch(url, config);
       
       if (!response.ok) {
-        throw new Error(\`HTTP error! status: \${response.status}\`);
+        const errorText = await response.text();
+        console.error('API Error:', response.status, errorText);
+        throw new Error(\`HTTP \${response.status}: \${errorText}\`);
       }
 
       const data = await response.json();
@@ -96,19 +110,26 @@ class ApiClient {
     formData.append('username', credentials.username);
     formData.append('password', credentials.password);
 
-    const response = await fetch(\`\${this.baseURL}/auth/login\`, {
-      method: 'POST',
-      body: formData,
-    });
+    try {
+      const response = await fetch(\`\${this.baseURL}/auth/login\`, {
+        method: 'POST',
+        body: formData,
+      });
 
-    if (!response.ok) {
-      throw new Error('Login failed');
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Login failed:', response.status, errorText);
+        throw new Error(\`Login failed: \${response.status}\`);
+      }
+
+      const data = await response.json();
+      this.token = data.access_token;
+      localStorage.setItem('authToken', this.token!);
+      return data;
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
     }
-
-    const data = await response.json();
-    this.token = data.access_token;
-    localStorage.setItem('authToken', this.token!);
-    return data;
   }
 
   async getCurrentUser(): Promise<User> {
@@ -120,16 +141,16 @@ class ApiClient {
     localStorage.removeItem('authToken');
   }
 
-  // Properties
+  // Properties (note: endpoints need trailing slash for FastAPI)
   async getProperties(): Promise<Property[]> {
-    return this.request<Property[]>('/properties');
+    return this.request<Property[]>('/properties/');
   }
 
   async getProperty(id: number): Promise<Property> {
     return this.request<Property>(\`/properties/\${id}\`);
   }
 
-  // Audits
+  // Audits (note: endpoints need trailing slash for FastAPI)
   async getAudits(params?: {
     auditor_id?: number;
     reviewer_id?: number;
@@ -145,7 +166,7 @@ class ApiClient {
       });
     }
     
-    const endpoint = \`/audits\${queryParams.toString() ? \`?\${queryParams.toString()}\` : ''}\`;
+    const endpoint = \`/audits/\${queryParams.toString() ? \`?\${queryParams.toString()}\` : ''}\`;
     return this.request<Audit[]>(endpoint);
   }
 
@@ -166,7 +187,7 @@ class ApiClient {
   }
 
   async generateReport(auditId: number) {
-    return this.request(\`/ai/generate-report\`, {
+    return this.request('/ai/generate-report', {
       method: 'POST',
       body: JSON.stringify({
         audit_id: auditId,
