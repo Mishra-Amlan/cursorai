@@ -1,26 +1,19 @@
-import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Navigation } from '@/components/Navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { CalendarDays, Users, TrendingUp, AlertCircle } from 'lucide-react';
-import { Property, Audit } from '@shared/schema';
+import { CalendarDays, Users, TrendingUp, AlertCircle, Building, FileText, Robot } from 'lucide-react';
+import { useProperties, useAudits, useHealthCheck } from '@/hooks/use-api';
+import { Badge } from '@/components/ui/badge';
 
 export default function AdminDashboard() {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const { data: properties, isLoading } = useQuery<Property[]>({
-    queryKey: ['/api/properties'],
-  });
+  const { data: properties, isLoading: propertiesLoading, error: propertiesError } = useProperties();
+  const { data: audits, isLoading: auditsLoading, error: auditsError } = useAudits();
+  const { data: healthStatus } = useHealthCheck();
 
-  const { data: audits } = useQuery<Audit[]>({
-    queryKey: ['/api/audits'],
-  });
-
-  if (isLoading) {
+  if (propertiesLoading || auditsLoading) {
     return (
       <div className="min-h-screen gradient-bg">
         <Navigation />
@@ -41,18 +34,48 @@ export default function AdminDashboard() {
     );
   }
 
+  if (propertiesError || auditsError) {
+    return (
+      <div className="min-h-screen gradient-bg">
+        <Navigation />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Card className="bg-red-50 border-red-200">
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-2 text-red-800">
+                <AlertCircle className="h-5 w-5" />
+                <span className="font-semibold">Connection Error</span>
+              </div>
+              <p className="text-red-700 mt-2">
+                Unable to connect to the backend API. Please ensure the Python backend is running on port 8000.
+              </p>
+              <Button 
+                onClick={() => window.location.reload()} 
+                className="mt-4"
+                variant="outline"
+              >
+                Retry Connection
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  const totalProperties = properties?.length || 0;
+  const totalAudits = audits?.length || 0;
+  const pendingAudits = audits?.filter(audit => audit.status === 'scheduled' || audit.status === 'in_progress').length || 0;
+  const completedAudits = audits?.filter(audit => audit.status === 'completed').length || 0;
+
+  // Calculate compliance distribution
+  const complianceStats = {
+    green: audits?.filter(audit => audit.compliance_zone === 'green').length || 0,
+    amber: audits?.filter(audit => audit.compliance_zone === 'amber').length || 0,
+    red: audits?.filter(audit => audit.compliance_zone === 'red').length || 0,
+  };
+
   const handleScheduleAudit = () => {
     setShowScheduleModal(true);
-  };
-
-  const handleAssignAuditor = (propertyId: number) => {
-    console.log('Assigning auditor to property:', propertyId);
-    // Here you would implement auditor assignment logic
-  };
-
-  const handleViewReports = () => {
-    console.log('Opening reports view');
-    // Navigate to reports page
   };
 
   return (
@@ -60,247 +83,213 @@ export default function AdminDashboard() {
       <Navigation />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent mb-2">
-            Admin Dashboard
-          </h1>
-          <p className="text-gray-700 text-lg">Manage audit scheduling, assign auditors, and track progress</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
+          <p className="text-gray-600">Manage properties, audits, and system configuration</p>
           
-          <div className="mt-4 flex gap-4">
-            <Dialog open={showScheduleModal} onOpenChange={setShowScheduleModal}>
-              <DialogTrigger asChild>
-                <Button className="btn-warning">
-                  <CalendarDays className="w-4 h-4 mr-2" />
-                  Schedule New Audit
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle>Schedule New Audit</DialogTitle>
-                  <DialogDescription>
-                    Create a new audit assignment for a property.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="property">Property</Label>
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a property" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {properties?.map((property) => (
-                          <SelectItem key={property.id} value={property.id.toString()}>
-                            {property.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="auditor">Assigned Auditor</Label>
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select an auditor" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="sarah">Sarah Johnson</SelectItem>
-                        <SelectItem value="mike">Mike Chen</SelectItem>
-                        <SelectItem value="lisa">Lisa Thompson</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="date">Audit Date</Label>
-                    <Input type="date" />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setShowScheduleModal(false)}>
-                    Cancel
-                  </Button>
-                  <Button className="btn-success" onClick={() => {
-                    console.log('Scheduling audit...');
-                    setShowScheduleModal(false);
-                  }}>
-                    Schedule Audit
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-            
-            <Button variant="outline" onClick={handleViewReports} className="hover:bg-gray-50">
-              <TrendingUp className="w-4 h-4 mr-2" />
-              View Reports
-            </Button>
-          </div>
+          {/* System Status */}
+          {healthStatus && (
+            <div className="mt-4 flex items-center space-x-2">
+              <div className="flex items-center space-x-1">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-sm text-gray-600">Backend Connected</span>
+              </div>
+              <Badge variant="outline" className="text-xs">
+                <Robot className="w-3 h-3 mr-1" />
+                Gemini AI Ready
+              </Badge>
+            </div>
+          )}
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="card-modern card-hover">
+          <Card className="card-modern shadow-lg">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Active Audits</p>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-                    {audits?.filter(audit => audit.status === 'in_progress').length || 24}
-                  </p>
-                  <p className="text-xs text-green-600 font-medium">↑ 12% from last month</p>
+                  <p className="text-sm font-medium text-gray-600">Total Properties</p>
+                  <p className="text-2xl font-bold text-gray-900">{totalProperties}</p>
                 </div>
-                <div className="w-14 h-14 bg-gradient-to-r from-orange-100 to-red-100 rounded-xl flex items-center justify-center shadow-md">
-                  <AlertCircle className="text-orange-600 text-2xl" />
+                <div className="p-3 bg-blue-100 rounded-full">
+                  <Building className="h-6 w-6 text-blue-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
-          
-          <Card className="card-modern card-hover">
+
+          <Card className="card-modern shadow-lg">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Available Auditors</p>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">12</p>
-                  <p className="text-xs text-green-600 font-medium">5 assigned today</p>
+                  <p className="text-sm font-medium text-gray-600">Total Audits</p>
+                  <p className="text-2xl font-bold text-gray-900">{totalAudits}</p>
                 </div>
-                <div className="w-14 h-14 bg-gradient-to-r from-green-100 to-emerald-100 rounded-xl flex items-center justify-center shadow-md">
-                  <Users className="text-green-600 text-2xl" />
+                <div className="p-3 bg-green-100 rounded-full">
+                  <FileText className="h-6 w-6 text-green-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
-          
-          <Card className="card-modern card-hover">
+
+          <Card className="card-modern shadow-lg">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Pending Reviews</p>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">8</p>
-                  <p className="text-xs text-purple-600 font-medium">2 urgent</p>
+                  <p className="text-sm font-medium text-gray-600">Pending Audits</p>
+                  <p className="text-2xl font-bold text-gray-900">{pendingAudits}</p>
                 </div>
-                <div className="w-14 h-14 bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl flex items-center justify-center shadow-md">
-                  <AlertCircle className="text-purple-600 text-2xl" />
+                <div className="p-3 bg-yellow-100 rounded-full">
+                  <CalendarDays className="h-6 w-6 text-yellow-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
-          
-          <Card className="card-modern card-hover">
+
+          <Card className="card-modern shadow-lg">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Completion Rate</p>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">92%</p>
-                  <p className="text-xs text-emerald-600 font-medium">↑ 5% this month</p>
+                  <p className="text-sm font-medium text-gray-600">Completed</p>
+                  <p className="text-2xl font-bold text-gray-900">{completedAudits}</p>
                 </div>
-                <div className="w-14 h-14 bg-gradient-to-r from-emerald-100 to-teal-100 rounded-xl flex items-center justify-center shadow-md">
-                  <TrendingUp className="text-emerald-600 text-2xl" />
+                <div className="p-3 bg-purple-100 rounded-full">
+                  <TrendingUp className="h-6 w-6 text-purple-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Properties Due for Audit */}
-          <div className="lg:col-span-2">
-            <Card className="card-modern">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-xl font-bold text-gray-900">Properties Due for Audit</CardTitle>
-                  <Button 
-                    className="btn-warning" 
-                    onClick={handleScheduleAudit}
-                  >
-                    <CalendarDays className="w-4 h-4 mr-2" />
-                    Schedule New
-                  </Button>
+        {/* Compliance Overview */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <Card className="card-modern shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <TrendingUp className="h-5 w-5 mr-2" />
+                Compliance Overview
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+                  <span className="font-medium text-green-800">Green Zone</span>
+                  <Badge className="bg-green-100 text-green-800">{complianceStats.green}</Badge>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {properties?.slice(0, 3).map((property) => (
-                    <div key={property.id} className="interactive-hover flex items-center justify-between p-5 border border-gray-200 rounded-xl bg-white/50 backdrop-blur-sm">
-                      <div className="flex items-center">
-                        <img 
-                          src={property.image || 'https://images.unsplash.com/photo-1564501049412-61c2a3083791?ixlib=rb-4.0.3&auto=format&fit=crop&w=100&h=100'} 
-                          alt={property.name}
-                          className="w-16 h-16 rounded-xl object-cover mr-4 shadow-md"
-                        />
-                        <div>
-                          <h3 className="font-bold text-gray-900 text-lg">{property.name}</h3>
-                          <p className="text-sm text-gray-600 mb-2">Due: {property.nextAuditDate ? new Date(property.nextAuditDate).toLocaleDateString() : 'TBD'}</p>
-                          <span className={`inline-block px-3 py-1 text-xs font-semibold rounded-full shadow-sm ${
-                            property.status === 'red' 
-                              ? 'status-red'
-                              : property.status === 'amber'
-                              ? 'status-amber' 
-                              : 'status-green'
-                          }`}>
-                            {property.status === 'red' ? 'High Priority' : 
-                             property.status === 'amber' ? 'Medium Priority' : 'Normal Priority'}
-                          </span>
-                        </div>
-                      </div>
-                      <Button 
-                        className="btn-warning" 
-                        size="sm"
-                        onClick={() => handleAssignAuditor(property.id)}
-                      >
-                        <Users className="w-4 h-4 mr-2" />
-                        Assign Auditor
-                      </Button>
-                    </div>
-                  ))}
+                <div className="flex justify-between items-center p-3 bg-yellow-50 rounded-lg">
+                  <span className="font-medium text-yellow-800">Amber Zone</span>
+                  <Badge className="bg-yellow-100 text-yellow-800">{complianceStats.amber}</Badge>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+                <div className="flex justify-between items-center p-3 bg-red-50 rounded-lg">
+                  <span className="font-medium text-red-800">Red Zone</span>
+                  <Badge className="bg-red-100 text-red-800">{complianceStats.red}</Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-          {/* Recent Activity */}
-          <div>
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Activity</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-start space-x-3">
-                    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                      <i className="fas fa-user text-white text-sm"></i>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-gray-900">Sarah Johnson assigned to Taj Palace audit</p>
-                      <p className="text-xs text-gray-500">2 hours ago</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-start space-x-3">
-                    <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
-                      <i className="fas fa-check text-white text-sm"></i>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-gray-900">Taj Gateway report approved by QA</p>
-                      <p className="text-xs text-gray-500">4 hours ago</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-start space-x-3">
-                    <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
-                      <i className="fas fa-calendar text-white text-sm"></i>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-gray-900">New audit scheduled for Taj Coromandel</p>
-                      <p className="text-xs text-gray-500">6 hours ago</p>
-                    </div>
-                  </div>
+          <Card className="card-modern shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Robot className="h-5 w-5 mr-2" />
+                AI Features
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="flex items-center p-3 bg-blue-50 rounded-lg">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
+                  <span className="text-sm">Photo Analysis with Gemini Vision</span>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+                <div className="flex items-center p-3 bg-green-50 rounded-lg">
+                  <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                  <span className="text-sm">Automated Report Generation</span>
+                </div>
+                <div className="flex items-center p-3 bg-purple-50 rounded-lg">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full mr-3"></div>
+                  <span className="text-sm">Smart Score Suggestions</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+
+        {/* Properties Table */}
+        <Card className="card-modern shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>Properties</span>
+              <Button onClick={handleScheduleAudit} className="btn-primary">
+                Schedule New Audit
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {properties && properties.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2">Property Name</th>
+                      <th className="text-left py-2">Location</th>
+                      <th className="text-left py-2">Type</th>
+                      <th className="text-left py-2">Created</th>
+                      <th className="text-left py-2">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {properties.map((property) => (
+                      <tr key={property.id} className="border-b hover:bg-gray-50">
+                        <td className="py-3 font-medium">{property.name}</td>
+                        <td className="py-3 text-gray-600">{property.location}</td>
+                        <td className="py-3 text-gray-600">{property.property_type}</td>
+                        <td className="py-3 text-gray-600">
+                          {new Date(property.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="py-3">
+                          <Button size="sm" variant="outline">
+                            Manage
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Building className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                <p>No properties found. Add your first property to get started.</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Schedule Audit Modal */}
+        <Dialog open={showScheduleModal} onOpenChange={setShowScheduleModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Schedule New Audit</DialogTitle>
+              <DialogDescription>
+                Create a new audit for a property with AI-powered features.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <div className="flex items-center text-blue-800">
+                  <Robot className="h-4 w-4 mr-2" />
+                  <span className="font-semibold">AI Features Available</span>
+                </div>
+                <p className="text-sm text-blue-700 mt-1">
+                  This audit will include photo analysis, automated scoring, and intelligent reporting powered by Google Gemini.
+                </p>
+              </div>
+              <Button onClick={() => setShowScheduleModal(false)} className="w-full">
+                Create Audit (Coming Soon)
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

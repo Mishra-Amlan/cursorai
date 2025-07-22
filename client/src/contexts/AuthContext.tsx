@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, UserRole } from '@shared/schema';
+import { apiClient, User } from '@/utils/api';
+
+export type UserRole = 'admin' | 'auditor' | 'reviewer' | 'corporate' | 'hotelgm';
 
 interface AuthContextType {
   user: User | null;
@@ -8,6 +10,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   hasRole: (role: UserRole) => boolean;
   isLoading: boolean;
+  error: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -15,31 +18,36 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
+      setError(null);
+      setIsLoading(true);
 
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.user);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        return true;
-      }
-      return false;
+      // Login and get token
+      const authResponse = await apiClient.login({ username, password });
+      
+      // Get current user info
+      const currentUser = await apiClient.getCurrentUser();
+      
+      setUser(currentUser);
+      localStorage.setItem('user', JSON.stringify(currentUser));
+      return true;
     } catch (error) {
       console.error('Login failed:', error);
+      setError(error instanceof Error ? error.message : 'Login failed');
       return false;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const logout = () => {
+    apiClient.logout();
     setUser(null);
     localStorage.removeItem('user');
+    setError(null);
   };
 
   const hasRole = (role: UserRole): boolean => {
@@ -47,11 +55,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    const initAuth = async () => {
+      try {
+        const storedUser = localStorage.getItem('user');
+        const storedToken = localStorage.getItem('authToken');
+        
+        if (storedUser && storedToken) {
+          // Verify token is still valid by getting current user
+          try {
+            const currentUser = await apiClient.getCurrentUser();
+            setUser(currentUser);
+          } catch (error) {
+            // Token expired or invalid, clear storage
+            localStorage.removeItem('user');
+            localStorage.removeItem('authToken');
+            console.log('Token expired, please login again');
+          }
+        }
+      } catch (error) {
+        console.error('Auth initialization failed:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initAuth();
   }, []);
 
   return (
@@ -61,7 +89,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       isAuthenticated: !!user,
       hasRole,
-      isLoading
+      isLoading,
+      error
     }}>
       {children}
     </AuthContext.Provider>

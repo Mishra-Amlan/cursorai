@@ -12,6 +12,7 @@ import AuditorDashboard from "@/pages/AuditorDashboard";
 import ReviewerDashboard from "@/pages/ReviewerDashboard";
 import CorporateDashboard from "@/pages/CorporateDashboard";
 import HotelGMDashboard from "@/pages/HotelGMDashboard";
+import AIDemoPage from "@/pages/AIDemoPage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -19,6 +20,7 @@ function Router() {
     <Switch>
       <Route path="/" component={LoginPage} />
       <Route path="/roles" component={RoleSelection} />
+      <Route path="/ai-demo" component={AIDemoPage} />
       
       <Route path="/admin">
         <ProtectedRoute allowedRoles={['admin']}>
