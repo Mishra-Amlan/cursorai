@@ -104,77 +104,30 @@ class ApiClient {
     }
   }
 
-  // Authentication with multiple fallback methods
+  // Authentication
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    const loginMethods = [
-      // Method 1: Use flexible endpoint with JSON (preferred)
-      () => this.loginWithJSON(credentials),
-      // Method 2: Use flexible endpoint with FormData  
-      () => this.loginWithFormData('/auth/login-flexible', credentials),
-      // Method 3: Use original form endpoint as fallback
-      () => this.loginWithFormData('/auth/login', credentials),
-    ];
+    const formData = new FormData();
+    formData.append('username', credentials.username);
+    formData.append('password', credentials.password);
 
-    let lastError: Error | null = null;
-
-    for (const method of loginMethods) {
-      try {
-        const result = await method();
-        this.token = result.access_token;
-        localStorage.setItem('authToken', this.token);
-        return result;
-      } catch (error) {
-        console.warn('Login method failed, trying next method:', error);
-        lastError = error as Error;
-        continue;
-      }
-    }
-
-    // If all methods failed, throw the last error
-    throw lastError || new Error('All login methods failed');
-  }
-
-  private async loginWithJSON(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
-      const response = await fetch(\`\${this.baseURL}/auth/login-flexible\`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(credentials),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(\`JSON login failed: \${response.status} - \${errorText}\`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('JSON login failed:', error);
-      throw error;
-    }
-  }
-
-  private async loginWithFormData(endpoint: string, credentials: LoginCredentials): Promise<AuthResponse> {
-    try {
-      const formData = new FormData();
-      formData.append('username', credentials.username);
-      formData.append('password', credentials.password);
-
-      const response = await fetch(\`\${this.baseURL}\${endpoint}\`, {
+      const response = await fetch(\`\${this.baseURL}/auth/login\`, {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(\`Form login failed: \${response.status} - \${errorText}\`);
+        console.error('Login failed:', response.status, errorText);
+        throw new Error(\`Login failed: \${response.status}\`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      this.token = data.access_token;
+      localStorage.setItem('authToken', this.token);
+      return data;
     } catch (error) {
-      console.error('Form data login failed:', error);
+      console.error('Login error:', error);
       throw error;
     }
   }
@@ -256,32 +209,6 @@ class ApiClient {
   async healthCheck(): Promise<{ message: string }> {
     const response = await fetch(\`\${this.baseURL.replace('/api', '')}/\`);
     return response.json();
-  }
-
-  // Test connectivity
-  async testConnection(): Promise<{backend: boolean, auth: boolean}> {
-    try {
-      // Test backend health
-      await this.healthCheck();
-      const backendOk = true;
-
-      // Test auth endpoint
-      try {
-        const testResponse = await fetch(\`\${this.baseURL}/auth/login-flexible\`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: 'test', password: 'test' })
-        });
-        // We expect a 401, but not a 422 or 500
-        const authOk = testResponse.status === 401;
-        
-        return { backend: backendOk, auth: authOk };
-      } catch {
-        return { backend: backendOk, auth: false };
-      }
-    } catch {
-      return { backend: false, auth: false };
-    }
   }
 }
 
